@@ -20,14 +20,18 @@ if "image_url" not in st.session_state:
 if st.button("💡 Generate Business Idea"):
     openai.api_key = openai_key
     with st.spinner("Thinking of an idea..."):
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI(api_key=openai_key)
+
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are an expert AI that creates profitable, fast-launching business ideas for digital or AI-automated businesses."},
                 {"role": "user", "content": "Give me a new business idea."}
             ]
         )
-        st.session_state.idea = response.choices[0].message["content"]
+
+st.session_state.idea = response.choices[0].message.content
+
     st.success("Idea generated!")
 
 # Show idea
