@@ -1,5 +1,5 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 import requests
 import os
 
@@ -20,7 +20,7 @@ if "image_url" not in st.session_state:
 if st.button("💡 Generate Business Idea"):
     openai.api_key = openai_key
     with st.spinner("Thinking of an idea..."):
-        client = openai.OpenAI(api_key=openai_key)
+        client = OpenAI(api_key=openai_key)
 
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -43,12 +43,15 @@ if st.session_state.idea:
 if st.session_state.idea and st.button("🎨 Create DALL·E Branding Image"):
     openai.api_key = openai_key
     with st.spinner("Creating image..."):
-        response = openai.Image.create(
+        response = openai.images.generate(
+            model="dall-e-3",
             prompt=f"Brand logo or illustration for: {st.session_state.idea}",
-            n=1,
-            size="512x512"
+            size="1024x1024",
+            quality="standard",
+            n=1
         )
-        st.session_state.image_url = response['data'][0]['url']
+        st.session_state.image_url = response.data[0].url
+
     st.success("Image created!")
 
 # Show image
