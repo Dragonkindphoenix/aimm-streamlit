@@ -30,9 +30,9 @@ if st.button("💡 Generate Business Idea"):
             ]
         )
 
-st.session_state.idea = response.choices[0].message.content
+        st.session_state.idea = response.choices[0].message.content
 
-    st.success("Idea generated!")
+        st.success("Idea generated!")
 
 # Show idea
 if st.session_state.idea:
