@@ -118,7 +118,7 @@ if st.session_state.idea and st.button("🎨 Create Merch-Ready DALL·E Image"):
 
 # ─── Display the Image ─────────────────────────────────────────────────────────
 if st.session_state.image_url:
-    st.image(st.session_state.image_url, caption="DALL·E 3 Merch Image", use_column_width=True)
+    st.image(st.session_state.image_url, caption="DALL·E 3 Merch Image", use_container_width=True)
 
 # ─── Price Logic & Button 3: Automate Merch Drop via Zapier ───────────────────
 if st.session_state.idea and st.session_state.image_url and st.button("🚀 Automate Merch Drop via Zapier"):
