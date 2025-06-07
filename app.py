@@ -1,18 +1,50 @@
 import streamlit as st
 from openai import OpenAI
 import requests
+import random
 
 st.set_page_config(page_title="AIMM - AI Income Machine", layout="wide")
-st.title("🤖 AIMM - Enhanced AI Merch Generator")
+st.title("🤖 AIMM - Enhanced AI Merch Generator with Prompt Guidance")
 
 # ─── Sidebar: API Keys & Webhook ───────────────────────────────────────────────
 openai_key     = st.sidebar.text_input("🔑 OpenAI API Key", type="password")
 zapier_webhook = st.sidebar.text_input("🌐 Zapier Webhook URL", type="password")
 
+# ─── Prompt Guidance Controls ──────────────────────────────────────────────────
+st.sidebar.markdown("### 🎯 Prompt Guidance")
+# 1) Niche selector
+niche_options = [
+    "Funny parenting quotes",
+    "Cottagecore animals",
+    "Dark academia skeletons",
+    "Retro-futuristic tech jokes",
+    "Weird cryptid merch",
+    "Anxious therapist memes",
+    "Lesbian space cowboys",
+    "Evil plant moms",
+    "Birdwatcher fan art",
+    "Wholesome goth aesthetics",
+    "Chaotic gamer humor"
+]
+selected_niche = st.sidebar.selectbox("Choose a niche:", niche_options)
+
+# 2) Seed generator
+if "seed" not in st.session_state:
+    st.session_state.seed = ""
+if st.sidebar.button("🎲 Roll Creative Seed"):
+    adjectives = ["unhinged", "wholesome", "vintage", "chaotic", "haunted", "sassy", "stoic"]
+    niches     = ["gardeners", "gamers", "cat moms", "anime fans", "paranormal lovers", "teachers"]
+    items      = ["frogs", "skeletons", "robots", "ghosts", "mushrooms", "aliens"]
+    st.session_state.seed = f"{random.choice(adjectives)} {random.choice(niches)} with {random.choice(items)}"
+st.sidebar.write(f"🧪 Current Seed: **{st.session_state.seed or selected_niche}**")
+
 # ─── Session State ────────────────────────────────────────────────────────────
 if "idea"         not in st.session_state: st.session_state.idea         = ""
 if "image_url"    not in st.session_state: st.session_state.image_url    = ""
 if "product_type" not in st.session_state: st.session_state.product_type = ""
+
+# Determine the prompt context (seed > niche)
+prompt_context = st.session_state.seed or selected_niche
 
 # ─── Button 1: Generate High-Conversion Product Idea ──────────────────────────
 if st.button("💡 Generate High-Conversion Product Idea"):
@@ -39,8 +71,9 @@ if st.button("💡 Generate High-Conversion Product Idea"):
                     {
                         "role": "user",
                         "content": (
-                            "Give me one high-converting print-on-demand merch idea. Use market signals and real trends. "
-                            "Format it like:\n"
+                            f"Use the context seed “{prompt_context}”. "
+                            "Give me one fresh, ultra-specific print-on-demand product idea that Etsy has never seen before. "
+                            "Format as:\n"
                             "- **Product Type:**\n"
                             "- **Title:**\n"
                             "- **Description:**"
