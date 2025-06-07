@@ -3,8 +3,8 @@ from openai import OpenAI
 import requests
 import random
 
-st.set_page_config(page_title="AIMM - AI Income Machine", layout="wide")
-st.title("🤖 AIMM - Enhanced AI Merch Generator with Prompt Guidance")
+st.set_page_config(page_title="AIMM Pro - Premium AI Merch Generator", layout="wide")
+st.title("🤖 AIMM Pro - Premium AI Merch Generator")
 
 # ─── Sidebar: API Keys & Webhook ───────────────────────────────────────────────
 openai_key     = st.sidebar.text_input("🔑 OpenAI API Key", type="password")
@@ -12,23 +12,14 @@ zapier_webhook = st.sidebar.text_input("🌐 Zapier Webhook URL", type="password
 
 # ─── Prompt Guidance Controls ──────────────────────────────────────────────────
 st.sidebar.markdown("### 🎯 Prompt Guidance")
-# 1) Niche selector
 niche_options = [
-    "Funny parenting quotes",
-    "Cottagecore animals",
-    "Dark academia skeletons",
-    "Retro-futuristic tech jokes",
-    "Weird cryptid merch",
-    "Anxious therapist memes",
-    "Lesbian space cowboys",
-    "Evil plant moms",
-    "Birdwatcher fan art",
-    "Wholesome goth aesthetics",
-    "Chaotic gamer humor"
+    "Funny parenting quotes", "Cottagecore animals", "Dark academia skeletons",
+    "Retro-futuristic tech jokes", "Weird cryptid merch", "Anxious therapist memes",
+    "Lesbian space cowboys", "Evil plant moms", "Birdwatcher fan art",
+    "Wholesome goth aesthetics", "Chaotic gamer humor"
 ]
 selected_niche = st.sidebar.selectbox("Choose a niche:", niche_options)
 
-# 2) Seed generator
 if "seed" not in st.session_state:
     st.session_state.seed = ""
 if st.sidebar.button("🎲 Roll Creative Seed"):
@@ -39,11 +30,11 @@ if st.sidebar.button("🎲 Roll Creative Seed"):
 st.sidebar.write(f"🧪 Current Seed: **{st.session_state.seed or selected_niche}**")
 
 # ─── Session State ────────────────────────────────────────────────────────────
-if "idea"         not in st.session_state: st.session_state.idea         = ""
-if "image_url"    not in st.session_state: st.session_state.image_url    = ""
-if "product_type" not in st.session_state: st.session_state.product_type = ""
+for var in ["idea", "image_url", "product_type"]:
+    if var not in st.session_state:
+        st.session_state[var] = ""
 
-# Determine the prompt context (seed > niche)
+# Use seed if available, else selected niche
 prompt_context = st.session_state.seed or selected_niche
 
 # ─── Button 1: Generate High-Conversion Product Idea ──────────────────────────
@@ -71,7 +62,7 @@ if st.button("💡 Generate High-Conversion Product Idea"):
                     {
                         "role": "user",
                         "content": (
-                            f"Use the context seed “{prompt_context}”. "
+                            f"Use the context seed '{prompt_context}'. "
                             "Give me one fresh, ultra-specific print-on-demand product idea that Etsy has never seen before. "
                             "Format as:\n"
                             "- **Product Type:**\n"
@@ -84,12 +75,15 @@ if st.button("💡 Generate High-Conversion Product Idea"):
             full_idea = response.choices[0].message.content.strip()
             st.session_state.idea = full_idea
 
-            # Auto-detect product type
             lt = full_idea.lower()
-            if "mug" in lt:      st.session_state.product_type = "mug"
-            elif "shirt" in lt or "t-shirt" in lt: st.session_state.product_type = "t-shirt"
-            elif "poster" in lt: st.session_state.product_type = "poster"
-            else:                st.session_state.product_type = "product"
+            if "mug" in lt:
+                st.session_state.product_type = "mug"
+            elif "shirt" in lt or "t-shirt" in lt:
+                st.session_state.product_type = "t-shirt"
+            elif "poster" in lt:
+                st.session_state.product_type = "poster"
+            else:
+                st.session_state.product_type = "product"
 
         st.success("✅ Product idea generated!")
     except Exception as e:
@@ -106,16 +100,15 @@ if st.session_state.idea and st.button("🎨 Create Merch-Ready DALL·E Image"):
         client = OpenAI(api_key=openai_key)
         with st.spinner("Rendering a high-quality, ad-ready image..."):
             prompt = (
-                f"High-conversion {st.session_state.product_type} design based on the following idea: {st.session_state.idea}. "
-                "Style: bold, clean, and centered. Include elements relevant to the idea. "
-                "Suitable for Etsy listing, designed for merch, with a transparent background. "
-                "Vector-style, 1024×1024, strong focal point and minimal clutter."
+                f"Merch design for a {st.session_state.product_type} based on this idea: {st.session_state.idea}. "
+                "Centered composition, bold vector illustration, minimal clutter, high contrast, white or transparent background, "
+                "made for professional merch printing."
             )
             response = client.images.generate(
                 model="dall-e-3",
                 prompt=prompt,
                 size="1024x1024",
-                quality="standard",
+                quality="hd",
                 n=1
             )
             st.session_state.image_url = response.data[0].url
@@ -127,22 +120,33 @@ if st.session_state.idea and st.button("🎨 Create Merch-Ready DALL·E Image"):
 if st.session_state.image_url:
     st.image(st.session_state.image_url, caption="DALL·E 3 Merch Image", use_column_width=True)
 
-# ─── Button 3: Automate Merch Drop via Zapier ──────────────────────────────────
+# ─── Price Logic & Button 3: Automate Merch Drop via Zapier ───────────────────
 if st.session_state.idea and st.session_state.image_url and st.button("🚀 Automate Merch Drop via Zapier"):
     if not zapier_webhook:
         st.warning("⚠️ Please enter your Zapier Webhook URL.")
     else:
+        # Auto price based on product type
+        prod = st.session_state.product_type.lower()
+        if "mug" in prod:
+            price = "17.99"
+        elif "shirt" in prod:
+            price = "29.99"
+        elif "poster" in prod:
+            price = "21.99"
+        else:
+            price = "19.99"
+
         try:
             payload = {
                 "title":       st.session_state.idea.splitlines()[0][:100],
                 "description": st.session_state.idea,
                 "image_url":   st.session_state.image_url,
-                "price":       "29.99",
+                "price":       price,
                 "category":    st.session_state.product_type.capitalize()
             }
             resp = requests.post(zapier_webhook, json=payload, timeout=10)
             if resp.status_code == 200:
-                st.success("📤 Sent to Zapier!")
+                st.success(f"📤 Sent to Zapier! Price set at ${price}")
             else:
                 st.error(f"❌ Zapier failed: {resp.status_code} {resp.text}")
         except Exception as e:
