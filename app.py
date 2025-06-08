@@ -13,7 +13,7 @@ st.title("🤖 AIMM Pro – Automated AI Merch Generator with Trend Validation")
 openai_key       = st.sidebar.text_input("🔑 OpenAI API Key", type="password")
 zapier_webhook   = st.sidebar.text_input("🌐 Zapier Webhook URL", type="password")
 printify_api_key = st.sidebar.text_input("🔐 Printify API Key", type="password")
-printify_shop_id = st.sidebar.text_input("🏷️ Printify Shop ID", type="text")
+printify_shop_id = st.sidebar.text_input("🏷️ Printify Shop ID")
 
 # ─── Sidebar: Candidate Niches for Google Trends ──────────────────────────────
 st.sidebar.markdown("### 🔍 Step 1: Auto-Validate Niche via Google Trends")
@@ -25,11 +25,9 @@ candidates = st.sidebar.text_area(
 if st.sidebar.button("📈 Auto-Select Hot Niche"):
     with st.spinner("Fetching Google Trends data…"):
         pytrends = TrendReq(hl='en-US', tz=360)
-        # Only up to 5 at a time
-        terms = candidates[:5]
+        terms = candidates[:5]  # Google Trends allows up to 5 terms at once
         pytrends.build_payload(terms, timeframe='now 30-d')
         df = pytrends.interest_over_time().drop(columns=['isPartial'], errors='ignore')
-        # momentum = last 7 days avg - first 7 days avg
         last7  = df.tail(7).mean()
         first7 = df.head(7).mean()
         momentum = (last7 - first7).to_dict()
@@ -41,7 +39,7 @@ if st.sidebar.button("📈 Auto-Select Hot Niche"):
         st.success(f"🔥 Hot niche selected: **{hot_niche}**")
         st.session_state.hot_niche = hot_niche
 
-# Show which niche will be used
+# Show validated niche in sidebar
 if "hot_niche" in st.session_state:
     st.sidebar.markdown(f"#### ✅ Validated Niche:\n**{st.session_state.hot_niche}**")
 
@@ -50,10 +48,9 @@ for var in ("idea", "image_url", "product_type"):
     if var not in st.session_state:
         st.session_state[var] = ""
 
-# Use the hot niche as prompt context
 prompt_context = st.session_state.get("hot_niche", "")
 
-# ─── Button 2: Generate Idea ──────────────────────────────────────────────────
+# ─── Button: Generate High-Converting Idea ─────────────────────────────────────
 if st.button("💡 Generate High-Conversion Product Idea"):
     if not openai_key:
         st.error("Please enter your OpenAI API key.")
@@ -108,12 +105,12 @@ if st.button("💡 Generate High-Conversion Product Idea"):
         except Exception as e:
             st.error(f"Error generating idea: {e}")
 
-# ─── Display Idea ─────────────────────────────────────────────────────────────
+# ─── Display the Idea ─────────────────────────────────────────────────────────
 if st.session_state.idea:
     st.subheader("💡 Product Idea")
     st.markdown(st.session_state.idea)
 
-# ─── Button 3: Generate DALL·E Image ───────────────────────────────────────────
+# ─── Button: Generate Merch-Ready DALL·E Image ─────────────────────────────────
 if st.session_state.idea and st.button("🎨 Create Merch-Ready Image"):
     try:
         client = OpenAI(api_key=openai_key)
@@ -135,7 +132,7 @@ if st.session_state.idea and st.button("🎨 Create Merch-Ready Image"):
     except Exception as e:
         st.error(f"Error generating image: {e}")
 
-# ─── Display Image ────────────────────────────────────────────────────────────
+# ─── Display the Image ─────────────────────────────────────────────────────────
 if st.session_state.image_url:
     st.image(
         st.session_state.image_url,
@@ -143,7 +140,7 @@ if st.session_state.image_url:
         use_container_width=True
     )
 
-# ─── Button 4: Automate Merch Drop via Zapier & Printify/Etsy ──────────────────
+# ─── Button: Automate Merch Drop via Zapier & Printify/Etsy ────────────────────
 if (
     st.session_state.idea and
     st.session_state.image_url and
@@ -152,7 +149,7 @@ if (
     if not zapier_webhook:
         st.warning("Please enter your Zapier Webhook URL.")
     else:
-        # auto-price based on type
+        # Price logic
         prod = st.session_state.product_type.lower()
         if "mug" in prod:
             price = "17.99"
@@ -181,7 +178,7 @@ if (
         except Exception as e:
             st.error(f"Error sending to Zapier: {e}")
 
-        # Optional: surface Etsy URL via Printify API
+        # Surface Etsy URL via Printify API (optional)
         if printify_api_key and printify_shop_id:
             headers = {"Authorization": f"Bearer {printify_api_key}"}
             r = requests.get(
@@ -201,4 +198,3 @@ if (
                         break
             else:
                 st.error("Could not retrieve Printify products.")
-
