@@ -2,103 +2,122 @@ import streamlit as st
 from openai import OpenAI
 import requests
 import random
+from pytrends.request import TrendReq
+import pandas as pd
 
-st.set_page_config(page_title="AIMM Pro - Premium AI Merch Generator", layout="wide")
-st.title("🤖 AIMM Pro - Premium AI Merch Generator")
+# ─── App Config ────────────────────────────────────────────────────────────────
+st.set_page_config(page_title="AIMM Pro - Automated AI Merch Generator", layout="wide")
+st.title("🤖 AIMM Pro – Automated AI Merch Generator with Trend Validation")
 
 # ─── Sidebar: API Keys & Webhook ───────────────────────────────────────────────
-openai_key     = st.sidebar.text_input("🔑 OpenAI API Key", type="password")
-zapier_webhook = st.sidebar.text_input("🌐 Zapier Webhook URL", type="password")
+openai_key       = st.sidebar.text_input("🔑 OpenAI API Key", type="password")
+zapier_webhook   = st.sidebar.text_input("🌐 Zapier Webhook URL", type="password")
+printify_api_key = st.sidebar.text_input("🔐 Printify API Key", type="password")
+printify_shop_id = st.sidebar.text_input("🏷️ Printify Shop ID", type="text")
 
-# ─── Prompt Guidance Controls ──────────────────────────────────────────────────
-st.sidebar.markdown("### 🎯 Prompt Guidance")
-niche_options = [
-    "Funny parenting quotes", "Cottagecore animals", "Dark academia skeletons",
-    "Retro-futuristic tech jokes", "Weird cryptid merch", "Anxious therapist memes",
-    "Lesbian space cowboys", "Evil plant moms", "Birdwatcher fan art",
-    "Wholesome goth aesthetics", "Chaotic gamer humor"
-]
-selected_niche = st.sidebar.selectbox("Choose a niche:", niche_options)
+# ─── Sidebar: Candidate Niches for Google Trends ──────────────────────────────
+st.sidebar.markdown("### 🔍 Step 1: Auto-Validate Niche via Google Trends")
+candidates = st.sidebar.text_area(
+    "Enter candidate niches (one per line):",
+    value="Cottagecore Animal Mugs\nDark Academia Poster Prints\nChaotic Gamer T-Shirts"
+).splitlines()
 
-if "seed" not in st.session_state:
-    st.session_state.seed = ""
-if st.sidebar.button("🎲 Roll Creative Seed"):
-    adjectives = ["unhinged", "wholesome", "vintage", "chaotic", "haunted", "sassy", "stoic"]
-    niches     = ["gardeners", "gamers", "cat moms", "anime fans", "paranormal lovers", "teachers"]
-    items      = ["frogs", "skeletons", "robots", "ghosts", "mushrooms", "aliens"]
-    st.session_state.seed = f"{random.choice(adjectives)} {random.choice(niches)} with {random.choice(items)}"
-st.sidebar.write(f"🧪 Current Seed: **{st.session_state.seed or selected_niche}**")
+if st.sidebar.button("📈 Auto-Select Hot Niche"):
+    with st.spinner("Fetching Google Trends data…"):
+        pytrends = TrendReq(hl='en-US', tz=360)
+        # Only up to 5 at a time
+        terms = candidates[:5]
+        pytrends.build_payload(terms, timeframe='now 30-d')
+        df = pytrends.interest_over_time().drop(columns=['isPartial'], errors='ignore')
+        # momentum = last 7 days avg - first 7 days avg
+        last7  = df.tail(7).mean()
+        first7 = df.head(7).mean()
+        momentum = (last7 - first7).to_dict()
+        ranked = sorted(momentum.items(), key=lambda x: x[1], reverse=True)
+        scores_df = pd.DataFrame(ranked, columns=['niche','momentum'])
+        st.subheader("Google Trends Momentum Scores")
+        st.dataframe(scores_df)
+        hot_niche = ranked[0][0]
+        st.success(f"🔥 Hot niche selected: **{hot_niche}**")
+        st.session_state.hot_niche = hot_niche
 
-# ─── Session State ────────────────────────────────────────────────────────────
-for var in ["idea", "image_url", "product_type"]:
+# Show which niche will be used
+if "hot_niche" in st.session_state:
+    st.sidebar.markdown(f"#### ✅ Validated Niche:\n**{st.session_state.hot_niche}**")
+
+# ─── Session State Defaults ────────────────────────────────────────────────────
+for var in ("idea", "image_url", "product_type"):
     if var not in st.session_state:
         st.session_state[var] = ""
 
-# Use seed if available, else selected niche
-prompt_context = st.session_state.seed or selected_niche
+# Use the hot niche as prompt context
+prompt_context = st.session_state.get("hot_niche", "")
 
-# ─── Button 1: Generate High-Conversion Product Idea ──────────────────────────
+# ─── Button 2: Generate Idea ──────────────────────────────────────────────────
 if st.button("💡 Generate High-Conversion Product Idea"):
-    try:
-        client = OpenAI(api_key=openai_key)
-        with st.spinner("Generating a data-backed, viral-worthy merch idea..."):
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are AIMM’s Product Innovation Engine — an AI strategist who reverse-engineers "
-                            "best-selling Etsy and Printify products using up-to-date trends, SEO demand, and viral niches. "
-                            "You use insights from Google Trends, Etsy's top sellers, Amazon reviews, and Pinterest saves to craft "
-                            "data-backed, original merch ideas that convert. All outputs must be:\n"
-                            "- Fresh, never repeated\n"
-                            "- Visually clear for DALL·E illustration\n"
-                            "- Targeted to buyers with intent (e.g. dog moms, dark humor fans, fantasy gamers, therapists)\n"
-                            "- Include: product type (mug, shirt, poster), short Etsy-style title, and a 1-2 sentence description.\n"
-                            "Always optimize for shareability, emotional impact, and humor or identity-based appeal."
-                        )
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Use the context seed '{prompt_context}'. "
-                            "Give me one fresh, ultra-specific print-on-demand product idea that Etsy has never seen before. "
-                            "Format as:\n"
-                            "- **Product Type:**\n"
-                            "- **Title:**\n"
-                            "- **Description:**"
-                        )
-                    }
-                ]
-            )
-            full_idea = response.choices[0].message.content.strip()
-            st.session_state.idea = full_idea
+    if not openai_key:
+        st.error("Please enter your OpenAI API key.")
+    elif not prompt_context:
+        st.warning("Please auto-select a validated niche first.")
+    else:
+        try:
+            client = OpenAI(api_key=openai_key)
+            with st.spinner("Generating a data-backed, viral-worthy merch idea..."):
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are AIMM’s Product Innovation Engine — an AI strategist who reverse-engineers "
+                                "best-selling Etsy and Printify products using up-to-date trends, SEO demand, and viral niches. "
+                                "You use insights from Google Trends, Etsy's top sellers, Amazon reviews, and Pinterest saves to craft "
+                                "data-backed, original merch ideas that convert. All outputs must be:\n"
+                                "- Fresh, never repeated\n"
+                                "- Visually clear for DALL·E illustration\n"
+                                "- Targeted to buyers with intent\n"
+                                "- Include: product type (mug, shirt, poster), short Etsy-style title, and a 1-2 sentence description.\n"
+                                "Always optimize for shareability, emotional impact, and humor or identity-based appeal."
+                            )
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Using niche '{prompt_context}', give me one fresh, ultra-specific print-on-demand product idea "
+                                "that Etsy has never seen before. Format as:\n"
+                                "- **Product Type:**\n"
+                                "- **Title:**\n"
+                                "- **Description:**"
+                            )
+                        }
+                    ]
+                )
+                full_idea = response.choices[0].message.content.strip()
+                st.session_state.idea = full_idea
 
-            lt = full_idea.lower()
-            if "mug" in lt:
-                st.session_state.product_type = "mug"
-            elif "shirt" in lt or "t-shirt" in lt:
-                st.session_state.product_type = "t-shirt"
-            elif "poster" in lt:
-                st.session_state.product_type = "poster"
-            else:
-                st.session_state.product_type = "product"
+                lt = full_idea.lower()
+                if "mug" in lt:
+                    st.session_state.product_type = "mug"
+                elif "shirt" in lt or "t-shirt" in lt:
+                    st.session_state.product_type = "t-shirt"
+                elif "poster" in lt:
+                    st.session_state.product_type = "poster"
+                else:
+                    st.session_state.product_type = "product"
+            st.success("✅ Product idea generated!")
+        except Exception as e:
+            st.error(f"Error generating idea: {e}")
 
-        st.success("✅ Product idea generated!")
-    except Exception as e:
-        st.error(f"❌ Error generating idea: {e}")
-
-# ─── Display the Idea ─────────────────────────────────────────────────────────
+# ─── Display Idea ─────────────────────────────────────────────────────────────
 if st.session_state.idea:
     st.subheader("💡 Product Idea")
     st.markdown(st.session_state.idea)
 
-# ─── Button 2: Create Merch-Ready DALL·E Image ─────────────────────────────────
-if st.session_state.idea and st.button("🎨 Create Merch-Ready DALL·E Image"):
+# ─── Button 3: Generate DALL·E Image ───────────────────────────────────────────
+if st.session_state.idea and st.button("🎨 Create Merch-Ready Image"):
     try:
         client = OpenAI(api_key=openai_key)
-        with st.spinner("Rendering a high-quality, ad-ready image..."):
+        with st.spinner("Rendering a high-quality image..."):
             prompt = (
                 f"Merch design for a {st.session_state.product_type} based on this idea: {st.session_state.idea}. "
                 "Centered composition, bold vector illustration, minimal clutter, high contrast, white or transparent background, "
@@ -112,20 +131,28 @@ if st.session_state.idea and st.button("🎨 Create Merch-Ready DALL·E Image"):
                 n=1
             )
             st.session_state.image_url = response.data[0].url
-        st.success("✅ DALL·E image created!")
+        st.success("✅ Image created!")
     except Exception as e:
-        st.error(f"❌ Error generating image: {e}")
+        st.error(f"Error generating image: {e}")
 
-# ─── Display the Image ─────────────────────────────────────────────────────────
+# ─── Display Image ────────────────────────────────────────────────────────────
 if st.session_state.image_url:
-    st.image(st.session_state.image_url, caption="DALL·E 3 Merch Image", use_container_width=True)
+    st.image(
+        st.session_state.image_url,
+        caption="DALL·E 3 Merch Image",
+        use_container_width=True
+    )
 
-# ─── Price Logic & Button 3: Automate Merch Drop via Zapier ───────────────────
-if st.session_state.idea and st.session_state.image_url and st.button("🚀 Automate Merch Drop via Zapier"):
+# ─── Button 4: Automate Merch Drop via Zapier & Printify/Etsy ──────────────────
+if (
+    st.session_state.idea and
+    st.session_state.image_url and
+    st.button("🚀 Automate Merch Drop")
+):
     if not zapier_webhook:
-        st.warning("⚠️ Please enter your Zapier Webhook URL.")
+        st.warning("Please enter your Zapier Webhook URL.")
     else:
-        # Auto price based on product type
+        # auto-price based on type
         prod = st.session_state.product_type.lower()
         if "mug" in prod:
             price = "17.99"
@@ -136,18 +163,42 @@ if st.session_state.idea and st.session_state.image_url and st.button("🚀 Auto
         else:
             price = "19.99"
 
+        payload = {
+            "title":       st.session_state.idea.splitlines()[0][:100],
+            "description": st.session_state.idea,
+            "image_url":   st.session_state.image_url,
+            "price":       price,
+            "category":    st.session_state.product_type.capitalize()
+        }
+
+        # Send to Zapier
         try:
-            payload = {
-                "title":       st.session_state.idea.splitlines()[0][:100],
-                "description": st.session_state.idea,
-                "image_url":   st.session_state.image_url,
-                "price":       price,
-                "category":    st.session_state.product_type.capitalize()
-            }
             resp = requests.post(zapier_webhook, json=payload, timeout=10)
             if resp.status_code == 200:
                 st.success(f"📤 Sent to Zapier! Price set at ${price}")
             else:
-                st.error(f"❌ Zapier failed: {resp.status_code} {resp.text}")
+                st.error(f"Zapier failed: {resp.status_code} {resp.text}")
         except Exception as e:
-            st.error(f"❌ Error sending to Zapier: {e}")
+            st.error(f"Error sending to Zapier: {e}")
+
+        # Optional: surface Etsy URL via Printify API
+        if printify_api_key and printify_shop_id:
+            headers = {"Authorization": f"Bearer {printify_api_key}"}
+            r = requests.get(
+                f"https://api.printify.com/v1/shops/{printify_shop_id}/products.json?limit=10",
+                headers=headers,
+                timeout=10
+            )
+            if r.ok:
+                for p in r.json().get("data", []):
+                    if p.get("title", "").startswith(payload["title"]):
+                        for store in p.get("external_stores", []):
+                            if store.get("integration_type") == "etsy":
+                                etsy_id  = store["id"]
+                                etsy_url = f"https://www.etsy.com/listing/{etsy_id}"
+                                st.success(f"🛒 Live on Etsy: [View Listing]({etsy_url})")
+                                break
+                        break
+            else:
+                st.error("Could not retrieve Printify products.")
+
