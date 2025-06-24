@@ -23,21 +23,38 @@ candidates = st.sidebar.text_area(
 ).splitlines()
 
 if st.sidebar.button("📈 Auto-Select Hot Niche"):
-    with st.spinner("Fetching Google Trends data…"):
-        pytrends = TrendReq(hl='en-US', tz=360)
-        terms = candidates[:5]  # Google Trends allows up to 5 terms at once
-        pytrends.build_payload(terms, timeframe='now 30-d')
-        df = pytrends.interest_over_time().drop(columns=['isPartial'], errors='ignore')
-        last7  = df.tail(7).mean()
-        first7 = df.head(7).mean()
-        momentum = (last7 - first7).to_dict()
-        ranked = sorted(momentum.items(), key=lambda x: x[1], reverse=True)
-        scores_df = pd.DataFrame(ranked, columns=['niche','momentum'])
-        st.subheader("Google Trends Momentum Scores")
-        st.dataframe(scores_df)
-        hot_niche = ranked[0][0]
-        st.success(f"🔥 Hot niche selected: **{hot_niche}**")
-        st.session_state.hot_niche = hot_niche
+    # sanitize up to 5 terms
+    terms = [t.strip() for t in candidates if t and isinstance(t, str)]
+    terms = terms[:5]
+
+    try:
+        with st.spinner("Fetching Google Trends data…"):
+            pytrends = TrendReq(hl='en-US', tz=360)
+            pytrends.build_payload(
+                kw_list=terms,
+                cat=0,
+                timeframe='now 30-d',
+                geo='',
+                gprop=''
+            )
+            df = pytrends.interest_over_time()
+            if df.empty:
+                st.warning("No trend data returned. Try different keywords.")
+            else:
+                df = df.drop(columns=['isPartial'])
+                st.line_chart(df)
+                st.success("✅ Trends fetched successfully!")
+                # compute momentum if you still want that:
+                last7  = df.tail(7).mean()
+                first7 = df.head(7).mean()
+                momentum = (last7 - first7).to_dict()
+                ranked = sorted(momentum.items(), key=lambda x: x[1], reverse=True)
+                hot_niche = ranked[0][0]
+                st.success(f"🔥 Hot niche: {hot_niche}")
+                st.session_state.hot_niche = hot_niche
+    except Exception as e:
+        st.error(f"Failed to fetch Trends: {e}")
+
 
 # Show validated niche in sidebar
 if "hot_niche" in st.session_state:
