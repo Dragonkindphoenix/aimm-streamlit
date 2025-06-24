@@ -23,7 +23,7 @@ candidates = st.sidebar.text_area(
 ).splitlines()
 
 if st.sidebar.button("📈 Auto-Select Hot Niche"):
-    # sanitize up to 5 terms
+    # sanitize up to 5 non-empty terms
     terms = [t.strip() for t in candidates if t and isinstance(t, str)]
     terms = terms[:5]
 
@@ -33,9 +33,9 @@ if st.sidebar.button("📈 Auto-Select Hot Niche"):
             pytrends.build_payload(
                 kw_list=terms,      # up to 5 search terms
                 cat=0,              # category (0 = all)
-                timeframe='now 30-d',
-                geo='',             # e.g. 'US' or '' for worldwide
-                gprop=''            # empty = web search
+                timeframe='now 30-d',  # last 30 days
+                geo='',             # '' = worldwide
+                gprop=''            # '' = web search
             )
             df = pytrends.interest_over_time()
             if df.empty:
@@ -44,7 +44,7 @@ if st.sidebar.button("📈 Auto-Select Hot Niche"):
                 df = df.drop(columns=['isPartial'])
                 st.line_chart(df)
                 st.success("✅ Trends fetched successfully!")
-                # compute momentum if you still want that:
+                # compute momentum
                 last7  = df.tail(7).mean()
                 first7 = df.head(7).mean()
                 momentum = (last7 - first7).to_dict()
@@ -54,7 +54,6 @@ if st.sidebar.button("📈 Auto-Select Hot Niche"):
                 st.session_state.hot_niche = hot_niche
     except Exception as e:
         st.error(f"Failed to fetch Trends: {e}")
-
 
 # Show validated niche in sidebar
 if "hot_niche" in st.session_state:
@@ -85,8 +84,8 @@ if st.button("💡 Generate High-Conversion Product Idea"):
                             "content": (
                                 "You are AIMM’s Product Innovation Engine — an AI strategist who reverse-engineers "
                                 "best-selling Etsy and Printify products using up-to-date trends, SEO demand, and viral niches. "
-                                "You use insights from Google Trends, Etsy's top sellers, Amazon reviews, and Pinterest saves to craft "
-                                "data-backed, original merch ideas that convert. All outputs must be:\n"
+                                "You use insights from Google Trends, Etsy's top sellers, Amazon reviews, and Pinterest saves "
+                                "to craft data-backed, original merch ideas that convert. All outputs must be:\n"
                                 "- Fresh, never repeated\n"
                                 "- Visually clear for DALL·E illustration\n"
                                 "- Targeted to buyers with intent\n"
@@ -158,11 +157,7 @@ if st.session_state.image_url:
     )
 
 # ─── Button: Automate Merch Drop via Zapier & Printify/Etsy ────────────────────
-if (
-    st.session_state.idea and
-    st.session_state.image_url and
-    st.button("🚀 Automate Merch Drop")
-):
+if st.session_state.idea and st.session_state.image_url and st.button("🚀 Automate Merch Drop"):
     if not zapier_webhook:
         st.warning("Please enter your Zapier Webhook URL.")
     else:
