@@ -31,11 +31,11 @@ if st.sidebar.button("📈 Auto-Select Hot Niche"):
         with st.spinner("Fetching Google Trends data…"):
             pytrends = TrendReq(hl='en-US', tz=360)
             pytrends.build_payload(
-                kw_list=terms,
-                cat=0,
+                kw_list=terms,      # up to 5 search terms
+                cat=0,              # category (0 = all)
                 timeframe='now 30-d',
-                geo='',
-                gprop=''
+                geo='',             # e.g. 'US' or '' for worldwide
+                gprop=''            # empty = web search
             )
             df = pytrends.interest_over_time()
             if df.empty:
