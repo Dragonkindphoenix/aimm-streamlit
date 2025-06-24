@@ -2,58 +2,56 @@ import streamlit as st
 from openai import OpenAI
 import requests
 import random
-from pytrends.request import TrendReq
-import pandas as pd
 
 # ─── App Config ────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="AIMM Pro - Automated AI Merch Generator", layout="wide")
-st.title("🤖 AIMM Pro – Automated AI Merch Generator with Trend Validation")
+st.title("🤖 AIMM Pro – Automated AI Merch Generator with Etsy-Driven Niche Validation")
 
-# ─── Sidebar: API Keys & Webhook ───────────────────────────────────────────────
+# ─── Sidebar: API Keys & Webhooks ──────────────────────────────────────────────
 openai_key       = st.sidebar.text_input("🔑 OpenAI API Key", type="password")
+etsy_api_key     = st.sidebar.text_input("🗝️ Etsy API Key", type="password")
 zapier_webhook   = st.sidebar.text_input("🌐 Zapier Webhook URL", type="password")
 printify_api_key = st.sidebar.text_input("🔐 Printify API Key", type="password")
 printify_shop_id = st.sidebar.text_input("🏷️ Printify Shop ID")
 
-# ─── Sidebar: Candidate Niches for Google Trends ──────────────────────────────
-st.sidebar.markdown("### 🔍 Step 1: Auto-Validate Niche via Google Trends")
+# ─── Sidebar: Candidate Niches via Etsy API ───────────────────────────────────
+st.sidebar.markdown("### 🔍 Step 1: Auto-Validate Niche via Etsy API")
 candidates = st.sidebar.text_area(
     "Enter candidate niches (one per line):",
     value="Cottagecore Animal Mugs\nDark Academia Poster Prints\nChaotic Gamer T-Shirts"
 ).splitlines()
 
-if st.sidebar.button("📈 Auto-Select Hot Niche"):
-    # sanitize up to 5 non-empty terms
-    terms = [t.strip() for t in candidates if t and isinstance(t, str)]
-    terms = terms[:5]
+def get_etsy_trends(term: str):
+    url = "https://openapi.etsy.com/v3/application/listings/active"
+    headers = {"x-api-key": etsy_api_key}
+    params  = {
+        "limit": 50,
+        "keyword": term,
+        "sort_on": "score",
+        "sort_order": "down"
+    }
+    resp = requests.get(url, params=params, headers=headers, timeout=10)
+    resp.raise_for_status()
+    return resp.json().get("results", [])
 
-    try:
-        with st.spinner("Fetching Google Trends data…"):
-            pytrends = TrendReq(hl='en-US', tz=360)
-            pytrends.build_payload(
-                kw_list=terms,      # up to 5 search terms
-                cat=0,              # category (0 = all)
-                timeframe='now 30-d',  # last 30 days
-                geo='',             # '' = worldwide
-                gprop=''            # '' = web search
-            )
-            df = pytrends.interest_over_time()
-            if df.empty:
-                st.warning("No trend data returned. Try different keywords.")
-            else:
-                df = df.drop(columns=['isPartial'])
-                st.line_chart(df)
-                st.success("✅ Trends fetched successfully!")
-                # compute momentum
-                last7  = df.tail(7).mean()
-                first7 = df.head(7).mean()
-                momentum = (last7 - first7).to_dict()
-                ranked = sorted(momentum.items(), key=lambda x: x[1], reverse=True)
-                hot_niche = ranked[0][0]
-                st.success(f"🔥 Hot niche: {hot_niche}")
-                st.session_state.hot_niche = hot_niche
-    except Exception as e:
-        st.error(f"Failed to fetch Trends: {e}")
+if st.sidebar.button("🔍 Auto-Select Hot Niche (Etsy)"):
+    if not etsy_api_key:
+        st.error("Please enter your Etsy API Key.")
+    else:
+        try:
+            hits = {}
+            for term in candidates:
+                term = term.strip()
+                if not term:
+                    continue
+                results = get_etsy_trends(term)
+                hits[term] = len(results)
+            # pick the niche with the most active listings
+            hot = max(hits, key=hits.get)
+            st.success(f"🔥 Hot Etsy niche: **{hot}** ({hits[hot]} listings)")
+            st.session_state.hot_niche = hot
+        except Exception as e:
+            st.error(f"Etsy API error: {e}")
 
 # Show validated niche in sidebar
 if "hot_niche" in st.session_state:
@@ -69,7 +67,7 @@ prompt_context = st.session_state.get("hot_niche", "")
 # ─── Button: Generate High-Converting Idea ─────────────────────────────────────
 if st.button("💡 Generate High-Conversion Product Idea"):
     if not openai_key:
-        st.error("Please enter your OpenAI API key.")
+        st.error("Please enter your OpenAI API Key.")
     elif not prompt_context:
         st.warning("Please auto-select a validated niche first.")
     else:
@@ -83,9 +81,8 @@ if st.button("💡 Generate High-Conversion Product Idea"):
                             "role": "system",
                             "content": (
                                 "You are AIMM’s Product Innovation Engine — an AI strategist who reverse-engineers "
-                                "best-selling Etsy and Printify products using up-to-date trends, SEO demand, and viral niches. "
-                                "You use insights from Google Trends, Etsy's top sellers, Amazon reviews, and Pinterest saves "
-                                "to craft data-backed, original merch ideas that convert. All outputs must be:\n"
+                                "best-selling Etsy and Printify products using real Etsy marketplace data, SEO demand, "
+                                "and viral niches. All outputs must be:\n"
                                 "- Fresh, never repeated\n"
                                 "- Visually clear for DALL·E illustration\n"
                                 "- Targeted to buyers with intent\n"
@@ -96,8 +93,8 @@ if st.button("💡 Generate High-Conversion Product Idea"):
                         {
                             "role": "user",
                             "content": (
-                                f"Using niche '{prompt_context}', give me one fresh, ultra-specific print-on-demand product idea "
-                                "that Etsy has never seen before. Format as:\n"
+                                f"Using Etsy niche '{prompt_context}', give me one fresh, ultra-specific print-on-demand product idea "
+                                "that sells on Etsy. Format as:\n"
                                 "- **Product Type:**\n"
                                 "- **Title:**\n"
                                 "- **Description:**"
@@ -157,7 +154,11 @@ if st.session_state.image_url:
     )
 
 # ─── Button: Automate Merch Drop via Zapier & Printify/Etsy ────────────────────
-if st.session_state.idea and st.session_state.image_url and st.button("🚀 Automate Merch Drop"):
+if (
+    st.session_state.idea and
+    st.session_state.image_url and
+    st.button("🚀 Automate Merch Drop")
+):
     if not zapier_webhook:
         st.warning("Please enter your Zapier Webhook URL.")
     else:
